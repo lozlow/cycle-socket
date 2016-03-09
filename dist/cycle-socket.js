@@ -66,32 +66,51 @@
 
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-	var observables = {};
-
 	function makeSocketDriver(uri, opts) {
 		var conn = (0, _socket2.default)(uri);
+		var observables = {};
+
 		return function socketDriver(outgoing$) {
+			outgoing$.subscribe(function (e) {
+				return console.log('got outgoing val', e);
+			});
+
+			function createOrPutObservable(eventType) {
+				if (typeof observables[eventType] === 'undefined') {
+					var observable = _rx.Observable.create(function (observer) {
+						var cb = observer.onNext.bind(observer);
+						console.log('listening to socket on', eventType);
+						conn.on(eventType, function () {
+							observer.onNext.apply(observer, arguments);
+						});
+
+						return function disposeSub() {
+							console.log('disposed on', eventType);
+							conn.off(eventType, cb);
+							delete observables[eventType];
+						};
+					});
+					observables[eventType] = {
+						sub: observable,
+						share: observable.share()
+					};
+				}
+				return observables[eventType];
+			}
+
 			return {
 				on: function on(eventType) {
-					if (typeof observables[eventType] === 'undefined') {
-						observables[eventType] = _rx.Observable.create(function (observer) {
-							var cb = observer.onNext.bind(observer);
-							console.log('listening to socket');
-							conn.on(eventType, function () {
-								console.log('passing to observer');
-								observer.onNext.apply(observer, arguments);
-							});
-
-							// Note that this is optional, you do not have to return this if you require no cleanup
-							return function disposeSub() {
-								console.log('disposed');
-								conn.off(eventType, cb);
-								delete observables[eventType];
-							};
-						}).share();
-					}
-					debugger;
-					return observables[eventType];
+					return createOrPutObservable(eventType).share;
+				},
+				replaySub: function replaySub(eventType, count) {
+					var stream = createOrPutObservable(eventType).share.replay(null, count);
+					var connection = stream.connect();
+					return _rx.Observable.create(function (observer) {
+						stream.subscribe(observer);
+						return function dispose() {
+							connection.dispose();
+						};
+					});
 				}
 			};
 		};

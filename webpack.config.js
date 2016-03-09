@@ -2,7 +2,7 @@ const path = require('path');
 
 module.exports = {
 	entry: {
-		app: ['./lib/index.js']
+		app: ['./lib/cycle-socket.js']
 	},
 	output: {
 		path: path.resolve(__dirname, 'dist'),
